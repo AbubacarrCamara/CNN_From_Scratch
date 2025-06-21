@@ -1,6 +1,4 @@
-import pandas as pd
 import numpy as np 
-
 
 class Tensor:
    
@@ -46,6 +44,86 @@ class Tensor:
 
         def __repr__(self):
             return f"Tensor(shape={self.shape}, requires_grad={self.requires_grad})"
+        
+
+    def __add__(self, other_tensor):
+        """
+        Element - wise addition of two Tensors 
+
+        Steps:
+        1 - Ensures bother operands are Tensor instances 
+        2 - Determine the forward pass (element - wise addition)
+        3 - Determine if the output requires gradient tracking 
+        4 - Records the computation graph edges for backpropagation 
+        5 - Defines and attaches backward function to propogate gradients 
+        
+        """
+
+        # Ensures both variables are tensors before beginning
+        if not isinstance(other_tensor, Tensor):
+            other_tensor = Tensor(data=other_tensor, requires_grad=False)
+
+        # Computes forward data
+        out_data = self.data + other_tensor.data
+
+        # Decides if gradient is needed
+        out_requires_grad = self.requires_grad or other_tensor.requires_grad
+        out = Tensor(data=out_data, requires_grad=out_requires_grad)
+
+        # Records graph connectivity
+        out._prev = {self, other_tensor}
+        out._op = "add"
+
+        # Defines backward logic
+        def _backward():
+            # Pushes out.grad to inputs after calculating new gradient 
+            if self.requires_grad:
+                self.grad = (self.grad or np.zeros_like(self.data)) + out.grad
+
+            if other_tensor.requires_grad:
+                other_tensor.grad = (other_tensor.grad or np.zeros_like(other_tensor.grad)) + out.grad
+
+        out._backward_fn = _backward
+
+        return out
+    
+    def __matmul__(self, other):
+        """
+        This method is to calculate matrix multiplactions 
+        """
+        # Computes forward data 
+        out_data = np.dot(self.data, other.data)
+
+        # Determines if gradients are needed
+        requires = self.requires_grad or other.requires_grad
+        out = Tensor(data=out_data, requires_grad=requires)
+
+        # Hooks up the graph
+        out._prev = {self, other}
+        out._op = "matmul"
+
+        # matrix multiplication - > C = A * B
+        # The transpose trick is used to find the loss of our function with respect to A and B 
+        # - ∂L/∂A = grad_C @ Bᵀ
+        # - ∂L/∂B = Aᵀ @ grad_C
+        def _backward():
+            # Grabs the incoming gradients w.r.t (with respect to) the output
+            grad_C = out.grad or np.zeros_like(out.grad)
+
+            # Computes the accumlate gradient for A
+            if self.requires_grad:
+                grad_A = grad_C @ np.transpose(other.data)
+                self.grad = (self.grad or np.zeros_like(self.grad)) + grad_A
+
+            # Computes the accumlate gradient for A
+            if other.requires_grad:
+                grad_B = np.transpose(self.data) @ grad_C
+                other.grad = (other.grad or np.zeros_like(other.grad)) + grad_B
+
+        # Attaches backward function to the output Tensor
+        out._backward_fn = _backward
+
+        return out 
 
 class Layer:
     """
