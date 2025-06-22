@@ -124,7 +124,27 @@ class Tensor:
         out._backward_fn = _backward
 
         return out 
+    
+    def reshape(self, new_shape):
+        # Computes forward data view 
+        out_data = self.data.reshape(new_shape)
+        # Passes along required gradients
+        out = Tensor(data=out_data, requires_grad=self.requires_grad)
 
+        # Graph link
+        out._prev = {self}
+        out._op = "reshape"
+
+        # Backward simply un - reshapes the incoming gradient 
+        def _backward():
+            if self.requires_grad:
+                grad_out = out.grad if out.grad is not None else np.zeros_like(out_data)
+                self.grad = (self.grad or np.zeros_like(self.data)) + grad_out.reshape(self.data.shape)
+
+        out._backward_fn = _backward
+
+        return out
+ 
 class Layer:
     """
         This class is an abstract base layer for all layers and will handle 
