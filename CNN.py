@@ -144,6 +144,43 @@ class Tensor:
         out._backward_fn = _backward
 
         return out
+    
+    def transpose(self, axes):
+        # Forward rearranges axes
+        out_data = self.data.transpose(axes)
+
+        out = Tensor(data=out_data, requires_grad=self.requires_grad)
+
+        # graph hook
+        out._prev = {self}
+        out._op = "transpose"
+
+        # Backwards awaps axes back
+        def _backward():
+            # only propogates if Tensor need a gradient
+            if self.requires_grad:
+                # Sees grad_c from out.grad or zeros if None 
+                grad_C = (out.grad 
+                          if out.grad is not None
+                          else np.zeros_like(out_data))
+                
+            # Inverts the axes permutations 
+            inverse_axes = tuple(np.argsort(axes))
+
+            # Applys inverse transpose to grad_c
+            grad_self = grad_c.transpose(inverse_axes)
+
+            # Accumulates into self.grad
+            self.grad = (self.grad
+                         if self.grad is not None
+                         else np.zeros_like(self.data))
+            self.grad += grad_self
+
+        # Attaches backward function
+        out._backward_fn = _backward
+
+        # Returns new Tensor
+        return out
  
 class Layer:
     """
